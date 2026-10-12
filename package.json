@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-bundle-optimizer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "sergeybruska",
   "description": "Vite plugin for automatic production bundle optimization via intelligent chunk splitting, vendor grouping, shared dependency extraction, and compression.",
   "license": "MIT",
@@ -57,7 +57,8 @@
     "*.{ts,js}": "eslint --fix"
   },
   "peerDependencies": {
-    "vite": ">=5"
+    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0",
+    "rollup": "^4.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

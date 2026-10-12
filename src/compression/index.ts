@@ -5,45 +5,47 @@ import type { ResolvedConfig } from '../types/index.js';
 export { gzipCompressSync, gzipCompress, gzipSize } from './gzip.js';
 export { brotliCompressSyncData, brotliCompressData, brotliSize } from './brotli.js';
 
-import type { OutputAsset, OutputBundle } from 'rollup';
+import type { OutputAsset, OutputBundle, PluginContext } from 'rollup';
 
-/** Compress all JS/CSS assets in the bundle, adding .gz and .br files. */
-export function compressBundle(bundle: OutputBundle, config: ResolvedConfig): void {
+function isCompressedFile(fileName: string): boolean {
+  return fileName.endsWith('.gz') || fileName.endsWith('.br');
+}
+
+/**
+ * Compress all JS/CSS assets in the bundle, emitting .gz and .br files via
+ * the public `emitFile` API. This is compatible with Rollup and Rolldown.
+ */
+export function compressBundle(
+  context: PluginContext,
+  bundle: OutputBundle,
+  config: ResolvedConfig,
+): void {
   const assets = Object.entries(bundle).filter(
     ([, asset]) => asset.type === 'asset',
   ) as [string, OutputAsset][];
 
   for (const [fileName, asset] of assets) {
     if (!fileName.endsWith('.js') && !fileName.endsWith('.css')) continue;
+    if (isCompressedFile(fileName)) continue;
 
     const source = typeof asset.source === 'string' ? asset.source : Buffer.from(asset.source);
 
     if (config.compression.gzip) {
       const gz = gzipCompressSync(source, config.compression.gzipLevel);
-      bundle[`${fileName}.gz`] = {
+      context.emitFile({
         type: 'asset',
         fileName: `${fileName}.gz`,
-        name: undefined,
-        names: [],
-        originalFileName: null,
-        originalFileNames: [],
         source: gz,
-        needsCodeReference: false,
-      } as unknown as OutputAsset;
+      });
     }
 
     if (config.compression.brotli) {
       const br = brotliCompressSyncData(source, config.compression.brotliQuality);
-      bundle[`${fileName}.br`] = {
+      context.emitFile({
         type: 'asset',
         fileName: `${fileName}.br`,
-        name: undefined,
-        names: [],
-        originalFileName: null,
-        originalFileNames: [],
         source: br,
-        needsCodeReference: false,
-      } as unknown as OutputAsset;
+      });
     }
   }
 }

@@ -59,6 +59,8 @@ bundleOptimizer({
   compression: {
     gzip: true,
     brotli: true,
+    gzipLevel: 9,       // 1-9, higher = smaller output
+    brotliQuality: 11,  // 0-11, higher = smaller output
   },
 
   // Reporting
@@ -197,13 +199,14 @@ The optimization pipeline runs in the following stages:
    - **Shared chunks** — code used by multiple entry points, extracted so it isn't duplicated.
    - **Vendor chunks** — third‑party dependencies, grouped according to the configured vendor groups.
 4. **Final JS chunks** — Shared and vendor chunks are combined with the remaining entry chunks into the final set of JS chunks emitted to `dist/assets`.
-5. **Compression reporting** — Each final chunk is measured with both **gzip** and **brotli** to report the actual transfer sizes.
+5. **Compression** — JS and CSS assets are compressed with **gzip** and **brotli**, producing `.gz` and `.br` files alongside the originals.
+6. **Compression reporting** — Each final chunk is measured with both **gzip** and **brotli** to report the actual transfer sizes.
 
 The plugin works at the chunk topology level only — it does not modify, remove, or rewrite application code. Tree shaking remains Rollup's responsibility.
 
 ## Requirements
 
-- Vite 5+
+- Vite 5+ (supports Vite 5.x, 6.x, 7.x, and 8.x with Rolldown)
 - Node.js 20+
 
 ## License
