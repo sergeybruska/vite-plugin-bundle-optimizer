@@ -111,7 +111,7 @@ export function bundleOptimizer(options: BundleOptimizerOptions = {}): Plugin {
       try {
         // Compression
         if (config.compression.gzip || config.compression.brotli) {
-          compressBundle(bundle, config);
+          compressBundle(this, bundle, config);
         }
 
         // Report
