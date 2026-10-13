@@ -440,3 +440,406 @@ describe('integration: Vite build with bundleOptimizer', () => {
     }
   }, 30_000);
 });
+
+describe('integration: analyzeOnly mode', () => {
+  it('does not create .gz/.br files in analyzeOnly mode', async () => {
+    setupFixture();
+    try {
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [
+          bundleOptimizer({
+            analyzeOnly: true,
+            compression: { gzip: true, brotli: true },
+            report: { enabled: false },
+          }),
+          mockResolverPlugin(),
+        ],
+      });
+
+      const allFiles = collectFilesDeep(DIST_DIR).map(baseName);
+      const gzFiles = allFiles.filter((f) => f.endsWith('.gz'));
+      const brFiles = allFiles.filter((f) => f.endsWith('.br'));
+
+      expect(gzFiles).toHaveLength(0);
+      expect(brFiles).toHaveLength(0);
+    } finally {
+      cleanupFixture();
+    }
+  }, 30_000);
+
+  it('produces same chunk set as build without plugin', async () => {
+    setupFixture();
+    try {
+      // Build without plugin
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist-no-plugin',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [mockResolverPlugin()],
+      });
+
+      // Build with analyzeOnly
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist-analyze',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [
+          bundleOptimizer({
+            analyzeOnly: true,
+            report: { enabled: false },
+          }),
+          mockResolverPlugin(),
+        ],
+      });
+
+      const noPluginDir = resolve(FIXTURE_DIR, 'dist-no-plugin');
+      const analyzeDir = resolve(FIXTURE_DIR, 'dist-analyze');
+
+      const noPluginFiles = collectFilesDeep(noPluginDir).map(baseName).sort();
+      const analyzeFiles = collectFilesDeep(analyzeDir).map(baseName).sort();
+
+      // Same set of files (excluding any report files)
+      expect(analyzeFiles).toEqual(noPluginFiles);
+    } finally {
+      cleanupFixture();
+      // Clean up extra dist dirs
+      const noPluginDir = resolve(FIXTURE_DIR, 'dist-no-plugin');
+      const analyzeDir = resolve(FIXTURE_DIR, 'dist-analyze');
+      if (existsSync(noPluginDir)) rmSync(noPluginDir, { recursive: true, force: true });
+      if (existsSync(analyzeDir)) rmSync(analyzeDir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('JS file contents are identical to build without plugin', async () => {
+    setupFixture();
+    try {
+      // Build without plugin
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist-no-plugin',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [mockResolverPlugin()],
+      });
+
+      // Build with analyzeOnly
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist-analyze',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [
+          bundleOptimizer({
+            analyzeOnly: true,
+            report: { enabled: false },
+          }),
+          mockResolverPlugin(),
+        ],
+      });
+
+      const noPluginDir = resolve(FIXTURE_DIR, 'dist-no-plugin');
+      const analyzeDir = resolve(FIXTURE_DIR, 'dist-analyze');
+
+      const noPluginJsFiles = collectFilesDeep(noPluginDir).filter((f) => f.endsWith('.js'));
+      const analyzeJsFiles = collectFilesDeep(analyzeDir).filter((f) => f.endsWith('.js'));
+
+      // Same number of JS files
+      expect(analyzeJsFiles.length).toBe(noPluginJsFiles.length);
+
+      // Compare contents of each JS file by base name
+      for (const noPluginFile of noPluginJsFiles) {
+        const base = baseName(noPluginFile);
+        const analyzeFile = analyzeJsFiles.find((f) => baseName(f) === base);
+        expect(analyzeFile).toBeDefined();
+        const noPluginContent = readFileSync(noPluginFile, 'utf-8');
+        const analyzeContent = readFileSync(analyzeFile!, 'utf-8');
+        expect(analyzeContent).toBe(noPluginContent);
+      }
+    } finally {
+      cleanupFixture();
+      const noPluginDir = resolve(FIXTURE_DIR, 'dist-no-plugin');
+      const analyzeDir = resolve(FIXTURE_DIR, 'dist-analyze');
+      if (existsSync(noPluginDir)) rmSync(noPluginDir, { recursive: true, force: true });
+      if (existsSync(analyzeDir)) rmSync(analyzeDir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('generates JSON report with recommendations in analyzeOnly mode', async () => {
+    setupFixture();
+    try {
+      const reportPath = resolve(FIXTURE_DIR, 'bundle-report.json');
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [
+          bundleOptimizer({
+            analyzeOnly: true,
+            report: { format: 'json', output: reportPath },
+          }),
+          mockResolverPlugin(),
+        ],
+      });
+
+      expect(existsSync(reportPath)).toBe(true);
+      const reportContent = readFileSync(reportPath, 'utf-8');
+      const report = JSON.parse(reportContent);
+
+      expect(report.mode).toBe('analyzeOnly');
+      expect(report.summary ?? report.after).toBeDefined();
+      expect(Array.isArray(report.bundleRecommendations)).toBe(true);
+    } finally {
+      cleanupFixture();
+      const reportPath = resolve(FIXTURE_DIR, 'bundle-report.json');
+      if (existsSync(reportPath)) rmSync(reportPath, { force: true });
+    }
+  }, 30_000);
+
+  it('generates HTML report in analyzeOnly mode', async () => {
+    setupFixture();
+    try {
+      const reportPath = resolve(FIXTURE_DIR, 'bundle-report.html');
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [
+          bundleOptimizer({
+            analyzeOnly: true,
+            report: { format: 'html', output: reportPath },
+          }),
+          mockResolverPlugin(),
+        ],
+      });
+
+      expect(existsSync(reportPath)).toBe(true);
+      const htmlContent = readFileSync(reportPath, 'utf-8');
+      expect(htmlContent).toContain('Analyze Only');
+      expect(htmlContent).toContain('No automatic chunk optimization was applied');
+    } finally {
+      cleanupFixture();
+      const reportPath = resolve(FIXTURE_DIR, 'bundle-report.html');
+      if (existsSync(reportPath)) rmSync(reportPath, { force: true });
+    }
+  }, 30_000);
+
+  it('HTML report includes dark/light theme support', async () => {
+    setupFixture();
+    try {
+      const reportPath = resolve(FIXTURE_DIR, 'bundle-report.html');
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [
+          bundleOptimizer({
+            analyzeOnly: true,
+            report: { format: 'html', output: reportPath },
+          }),
+          mockResolverPlugin(),
+        ],
+      });
+
+      expect(existsSync(reportPath)).toBe(true);
+      const htmlContent = readFileSync(reportPath, 'utf-8');
+
+      // CSS variables for theming
+      expect(htmlContent).toContain('--bg:');
+      expect(htmlContent).toContain('--text:');
+      expect(htmlContent).toContain('--card-bg:');
+
+      // Dark theme media query
+      expect(htmlContent).toContain('prefers-color-scheme: dark');
+
+      // Dark theme overrides
+      expect(htmlContent).toContain('--bg: #1a1a2e');
+      expect(htmlContent).toContain('--card-bg: #252540');
+
+      // Bar colors use CSS variables
+      expect(htmlContent).toContain('var(--bar-initial)');
+      expect(htmlContent).toContain('var(--bar-lazy)');
+    } finally {
+      cleanupFixture();
+      const reportPath = resolve(FIXTURE_DIR, 'bundle-report.html');
+      if (existsSync(reportPath)) rmSync(reportPath, { force: true });
+    }
+  }, 30_000);
+
+  it('prints console report in analyzeOnly mode', async () => {
+    setupFixture();
+    const logs: string[] = [];
+    const originalLog = console.log;
+
+    try {
+      console.log = (...args: unknown[]) => {
+        logs.push(args.map(String).join(' '));
+        originalLog(...args as [unknown, ...unknown[]]);
+      };
+
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [
+          bundleOptimizer({
+            analyzeOnly: true,
+            report: { format: 'console' },
+          }),
+          mockResolverPlugin(),
+        ],
+      });
+
+      const output = logs.join('\n');
+      expect(output).toContain('Analyze Only');
+      expect(output).toContain('Current Build');
+      expect(output).toContain('No automatic chunk optimization was applied');
+    } finally {
+      console.log = originalLog;
+      cleanupFixture();
+    }
+  }, 30_000);
+
+  it('does not modify chunk names or count in analyzeOnly mode', async () => {
+    setupFixture();
+    try {
+      // Build without plugin
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist-no-plugin',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [mockResolverPlugin()],
+      });
+
+      // Build with analyzeOnly
+      await build({
+        root: FIXTURE_DIR,
+        logLevel: 'warn',
+        build: {
+          outDir: 'dist-analyze',
+          write: true,
+          minify: false,
+          rollupOptions: {
+            output: {
+              manualChunks: undefined as unknown as undefined,
+            },
+          },
+        },
+        plugins: [
+          bundleOptimizer({
+            analyzeOnly: true,
+            report: { enabled: false },
+          }),
+          mockResolverPlugin(),
+        ],
+      });
+
+      const noPluginDir = resolve(FIXTURE_DIR, 'dist-no-plugin');
+      const analyzeDir = resolve(FIXTURE_DIR, 'dist-analyze');
+
+      const noPluginFiles = collectFilesDeep(noPluginDir).map(baseName).sort();
+      const analyzeFiles = collectFilesDeep(analyzeDir).map(baseName).sort();
+
+      // Same number of files
+      expect(analyzeFiles.length).toBe(noPluginFiles.length);
+      // Same file names
+      expect(analyzeFiles).toEqual(noPluginFiles);
+    } finally {
+      cleanupFixture();
+      const noPluginDir = resolve(FIXTURE_DIR, 'dist-no-plugin');
+      const analyzeDir = resolve(FIXTURE_DIR, 'dist-analyze');
+      if (existsSync(noPluginDir)) rmSync(noPluginDir, { recursive: true, force: true });
+      if (existsSync(analyzeDir)) rmSync(analyzeDir, { recursive: true, force: true });
+    }
+  }, 30_000);
+});

@@ -17,6 +17,7 @@ A Vite plugin for automatic production bundle optimization via intelligent chunk
 - **Chunk size limits** — merges undersized chunks, enforces max chunk count
 - **Gzip & Brotli compression** — generates `.gz` and `.br` files for JS and CSS assets
 - **Bundle reports** — console, JSON, and HTML reports with before/after comparison
+- **Analyze-only mode** — analyze the build and generate recommendations without modifying chunk topology or output files
 - **Three strategies** — conservative, balanced (default), and aggressive
 - **Framework-agnostic** — works with React, Vue, Svelte, Solid, and vanilla
 
@@ -41,11 +42,59 @@ export default defineConfig({
 
 That's it. The plugin automatically optimizes your production build.
 
+## Analyze-Only Mode
+
+Not sure if the plugin will help? Enable `analyzeOnly` to get a report with recommendations without modifying your build output:
+
+```ts
+import { defineConfig } from 'vite';
+import bundleOptimizer from 'vite-plugin-bundle-optimizer';
+
+export default defineConfig({
+  plugins: [
+    bundleOptimizer({
+      analyzeOnly: true,
+      report: {
+        format: ['console', 'json', 'html'],
+        output: './bundle-report.json',
+        detailed: true,
+      },
+    }),
+  ],
+});
+```
+
+In this mode the plugin:
+
+- **Analyzes** the production build — modules, chunks, dependency graph, sizes
+- **Generates recommendations** — shared dependencies, vendor grouping, lazy loading candidates, chunk size issues, initial bundle size
+- **Does not modify** chunk topology, file names, or file contents
+- **Does not create** `.gz` or `.br` compression files
+- **Produces reports** in console, JSON, and HTML formats
+
+Each recommendation includes:
+
+| Field | Description |
+|---|---|
+| `id` | Stable recommendation type identifier |
+| `severity` | `info`, `warning`, or `high` |
+| `title` | Short title |
+| `description` | What was detected |
+| `reason` | Why it may be inefficient |
+| `evidence` | Measurable data backing the recommendation |
+| `suggestion` | Proposed change |
+| `estimatedImpact` | Potential effect (only if reliably calculable) |
+
+The HTML report supports automatic light/dark theme switching based on the user's system preference.
+
 ## Configuration
 
 ```ts
 bundleOptimizer({
   enabled: true,
+
+  // Analyze-only mode: analyze and recommend without modifying the build
+  analyzeOnly: false,
 
   // Optimization strategy: 'conservative' | 'balanced' | 'aggressive'
   strategy: 'balanced',
