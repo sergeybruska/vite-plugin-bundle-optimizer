@@ -1,5 +1,5 @@
 import type { OutputBundle, OutputChunk } from 'rollup';
-import type { BundleReport, ChunkInfo } from '../types/index.js';
+import type { BundleReport, BundleRecommendation, ChunkInfo } from '../types/index.js';
 import { gzipSize } from '../compression/gzip.js';
 import { brotliSize } from '../compression/brotli.js';
 
@@ -203,4 +203,20 @@ function generateRecommendations(chunks: ChunkInfo[], lazyChunkCount: number): s
   }
 
   return recommendations;
+}
+
+/**
+ * Compute a bundle report for analyze-only mode.
+ * In this mode, "before" and "after" are identical (no optimization applied).
+ * Structured recommendations are attached if provided.
+ */
+export function computeAnalyzeOnlyReport(
+  bundle: OutputBundle,
+  initialModules?: Set<string>,
+  bundleRecommendations?: BundleRecommendation[],
+): BundleReport {
+  const report = computeBundleReport(bundle, initialModules);
+  report.mode = 'analyzeOnly';
+  report.bundleRecommendations = bundleRecommendations ?? [];
+  return report;
 }

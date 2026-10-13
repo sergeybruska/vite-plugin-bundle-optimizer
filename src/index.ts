@@ -9,13 +9,16 @@ import type {
 import { resolveOptions } from './config/defaults.js';
 import { computeChunkPlan } from './optimizer/chunk-planner.js';
 import { compressBundle } from './compression/index.js';
-import { computeBundleReport } from './report/analysis.js';
+import { computeBundleReport, computeAnalyzeOnlyReport } from './report/analysis.js';
 import { printConsoleReport } from './report/console.js';
 import { writeJsonReport } from './report/json.js';
 import { writeHtmlReport } from './report/html.js';
+import { generateRecommendations } from './recommendations/index.js';
 import { isNodeModule, extractPackageName, matchAnyPattern } from './analyzer/package-analyzer.js';
+import { buildModuleGraph, getEntryIds } from './analyzer/module-graph.js';
+import { computeStaticReachability } from './analyzer/dependency-graph.js';
 import { findVendorGroup, findUserGroup } from './optimizer/vendor-groups.js';
-import type { BundleOptimizerOptions, ResolvedConfig } from './types/index.js';
+import type { BundleOptimizerOptions, ResolvedConfig, ModuleInfoExtended } from './types/index.js';
 
 interface PluginState {
   /** moduleId → chunkName (undefined = let Rollup decide) */
@@ -47,7 +50,7 @@ export function bundleOptimizer(options: BundleOptimizerOptions = {}): Plugin {
 
     /** Raise Vite's chunk size warning limit to match our maxChunkSize. */
     config(userConfig) {
-      if (!config.enabled) return;
+      if (!config.enabled || config.analyzeOnly) return;
       return {
         ...userConfig,
         build: {
@@ -67,7 +70,7 @@ export function bundleOptimizer(options: BundleOptimizerOptions = {}): Plugin {
      * `options` but before `outputOptions`).
      */
     outputOptions(outputOptions: OutputOptions) {
-      if (!config.enabled || state.isSSR) return;
+      if (!config.enabled || state.isSSR || config.analyzeOnly) return;
 
       const existing = (outputOptions as { manualChunks?: ManualChunksOption }).manualChunks;
       state.existingManualChunks = existing;
@@ -82,7 +85,7 @@ export function bundleOptimizer(options: BundleOptimizerOptions = {}): Plugin {
     /** After all modules are built, compute the chunk plan (before render phase). */
     buildEnd(error) {
       if (error) return;
-      if (!config.enabled || state.isSSR) return;
+      if (!config.enabled || state.isSSR || config.analyzeOnly) return;
 
       try {
         const moduleIds = (this as unknown as { getModuleIds: () => IterableIterator<string> }).getModuleIds();
@@ -109,13 +112,58 @@ export function bundleOptimizer(options: BundleOptimizerOptions = {}): Plugin {
       if (!config.enabled || state.isSSR) return;
 
       try {
+        if (config.analyzeOnly) {
+          // Analyze-only mode: generate reports with recommendations, no compression or optimization
+          if (config.report.enabled) {
+            // Build module graph for deeper analysis (shared dependencies, vendor grouping)
+            let moduleGraph: Map<string, ModuleInfoExtended> | undefined;
+            try {
+              const moduleIds = (this as unknown as { getModuleIds: () => IterableIterator<string> }).getModuleIds();
+              const getModuleInfo: RollupGetModuleInfo = (id: string) =>
+                (this as unknown as { getModuleInfo: RollupGetModuleInfo }).getModuleInfo(id);
+              moduleGraph = buildModuleGraph(moduleIds, getModuleInfo);
+            } catch {
+              // Module graph is optional; recommendations will skip shared-dependency analysis
+            }
+
+            // Compute initial modules for report
+            let initialModules: Set<string> | undefined;
+            if (moduleGraph) {
+              const entryIds = getEntryIds(moduleGraph);
+              initialModules = computeStaticReachability(moduleGraph, entryIds);
+            }
+
+            const report = computeAnalyzeOnlyReport(bundle, initialModules);
+            const recommendations = generateRecommendations(bundle, report, config, moduleGraph);
+            report.bundleRecommendations = recommendations;
+
+            for (const format of config.report.formats) {
+              if (format === 'console') {
+                printConsoleReport(report, config.report.detailed);
+              } else if (format === 'json') {
+                const outputPath = config.report.output || './bundle-report.json';
+                writeJsonReport(report, outputPath);
+              } else if (format === 'html') {
+                const outputPath = config.report.output || './bundle-report.html';
+                writeHtmlReport(report, outputPath);
+              }
+            }
+
+            // Budget checks (same semantics as normal mode)
+            checkBudgets(report, config);
+          }
+          return;
+        }
+
+        // Normal mode: compression + optimization reports
         // Compression
         if (config.compression.gzip || config.compression.brotli) {
           compressBundle(this, bundle, config);
         }
 
         // Report
-        if (config.report.enabled) {          const report = computeBundleReport(bundle, state.initialModules ?? undefined);
+        if (config.report.enabled) {
+          const report = computeBundleReport(bundle, state.initialModules ?? undefined);
 
           for (const format of config.report.formats) {
             if (format === 'console') {

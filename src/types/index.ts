@@ -47,6 +47,11 @@ export interface BudgetOptions {
 export interface BundleOptimizerOptions {
   /** Enable/disable the plugin. Default: true */
   enabled?: boolean;
+  /**
+   * Analyze-only mode: analyze the production build and generate recommendations
+   * without modifying chunk topology or output files. Default: false
+   */
+  analyzeOnly?: boolean;
   /** Optimization strategy. Default: 'balanced' */
   strategy?: Strategy;
   /** Minimum chunk size in bytes. Chunks smaller than this are merged. Default: 30_000 */
@@ -135,11 +140,32 @@ export interface BundleReport {
   };
   chunks: ChunkInfo[];
   recommendations: string[];
+  /** Structured recommendations (analyze-only mode). */
+  bundleRecommendations?: BundleRecommendation[];
+  /** Mode used to produce this report. */
+  mode?: 'analyzeOnly' | 'optimize';
+}
+
+/** A structured optimization recommendation with measurable evidence. */
+export interface BundleRecommendation {
+  id: string;
+  severity: 'info' | 'warning' | 'high';
+  title: string;
+  description: string;
+  reason: string;
+  evidence: Record<string, unknown>;
+  suggestion: string;
+  estimatedImpact?: {
+    initialSizeReduction?: number;
+    initialGzipReduction?: number;
+    confidence: 'low' | 'medium' | 'high';
+  };
 }
 
 /** Resolved (non-optional) configuration after merging user options with defaults. */
 export interface ResolvedConfig {
   enabled: boolean;
+  analyzeOnly: boolean;
   strategy: Strategy;
   minChunkSize: number;
   maxChunkSize: number;

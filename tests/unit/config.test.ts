@@ -124,4 +124,16 @@ describe('resolveOptions', () => {
     expect(resolveOptions({ failOnError: true }).failOnError).toBe(true);
     expect(resolveOptions().failOnError).toBe(false);
   });
+
+  it('analyzeOnly defaults to false', () => {
+    expect(resolveOptions().analyzeOnly).toBe(false);
+  });
+
+  it('resolves analyzeOnly when set to true', () => {
+    expect(resolveOptions({ analyzeOnly: true }).analyzeOnly).toBe(true);
+  });
+
+  it('resolves analyzeOnly when explicitly set to false', () => {
+    expect(resolveOptions({ analyzeOnly: false }).analyzeOnly).toBe(false);
+  });
 });

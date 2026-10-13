@@ -10,6 +10,7 @@ import { mergeRuntimePackages } from '../optimizer/vendor-groups.js';
 /** Default configuration values. */
 export const DEFAULTS = {
   enabled: true,
+  analyzeOnly: false,
   strategy: 'balanced' as Strategy,
   minChunkSize: 30_000,
   maxChunkSize: 500_000,
@@ -112,6 +113,7 @@ export function resolveOptions(options: BundleOptimizerOptions = {}): ResolvedCo
 
   const resolved: ResolvedConfig = {
     enabled: options.enabled ?? DEFAULTS.enabled,
+    analyzeOnly: options.analyzeOnly ?? DEFAULTS.analyzeOnly,
     strategy,
     minChunkSize: options.minChunkSize ?? strategyPreset.minChunkSize ?? DEFAULTS.minChunkSize,
     maxChunkSize: options.maxChunkSize ?? strategyPreset.maxChunkSize ?? DEFAULTS.maxChunkSize,
